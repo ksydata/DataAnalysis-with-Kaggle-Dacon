@@ -1,9 +1,6 @@
-
-### 통계분석실습 과제 통계학과 노호석 교수님 ###
-
 ## 서울특별시 마포구 시간별 기상상황 및 따릉이(서울시 공공자전거) 대여수 탐색적 데이터 분석 ####
 # 분석 목적 : 1시간 전 기상상황으로 "1시간 후" 시간대의" 따릉이 "대여수" 예측
-
+# https://dacon.io/competitions/open/235576/data
 
 library(readr)
 train <- read.csv("train.csv")
@@ -311,7 +308,5 @@ ggplot(data = train_outlier, aes(x = hour_bef_windspeed, y = count, group = time
 ggplot(data = train, aes(x = hour_bef_temperature, y = count)) + geom_point() + facet_wrap(~ hour_bef_precipitation) + geom_smooth(se = FALSE)
 
 ggplot(data = train, aes(x = hour_bef_temperature, y = count, group = timeZone, col = timeZone)) + geom_point() + facet_wrap(~hour_bef_precipitation) + geom_smooth(se = FALSE, method = "gam")
-
-
 
 
