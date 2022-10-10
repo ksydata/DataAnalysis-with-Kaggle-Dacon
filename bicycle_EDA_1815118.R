@@ -312,7 +312,7 @@ plot(lm)
   # Residuals vs Leverage 그래프 (잔차의 독립성)
 durbinWatsonTest(lm)
 dwtest(formula = lm,  alternative = "two.sided")
-  # 오차의 자기상관 (회귀로부터의 잔차가 자가상관관계가 없다는 귀무가설 채택)
+  # 오차의 자기상관 (회귀로부터의 잔차가 자기상관관계가 없다는 귀무가설 채택)
 
 train_outlier2 <- train[c(453, 1136, 804, 326, 370, 1149), ]
 train <- train[-c(453, 1136, 804, 326, 370, 1149), ]
