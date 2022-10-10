@@ -63,6 +63,7 @@ for (i in (8:10)) {
 }
 md.pattern(train[, 3:10])
   # Visualization and Imputation of Missing Values
+mice_plot <- aggr(train, col = c("grey", "lightgreen"), numbers = TRUE, sortVars = TRUE, labels = names(train), cex.axis = 0.7, gap = 3, ylab = c("결측치", "패턴"))
 
 
 # 1.2. 결측값을 추정된 회귀식의 예측값으로 대체 ####
@@ -108,7 +109,7 @@ mean(actuals != predicteds)
 train$hour_bef_ozone[is.na(train$hour_bef_ozone)] <- predicteds
 summary(train$hour_bef_ozone)
 
-md.pattern(train[, 3:10])
+mice_plot <- aggr(train[, 8:10], col = c("grey", "green"), numbers = TRUE, sortVars = TRUE, labels = names(train[, 8:10]), cex.axis = 0.7, gap = 3, ylab = c("결측값 대체", "패턴"))
 EDA <- ExpData(train)
 
 
@@ -312,7 +313,7 @@ plot(lm)
   # Residuals vs Leverage 그래프 (잔차의 독립성)
 durbinWatsonTest(lm)
 dwtest(formula = lm,  alternative = "two.sided")
-  # 오차의 자기상관 (회귀로부터의 잔차가 자기상관관계가 없다는 귀무가설 채택)
+  # 오차의 자기상관 (회귀로부터의 잔차가 자가상관관계가 없다는 귀무가설 채택)
 
 train_outlier2 <- train[c(453, 1136, 804, 326, 370, 1149), ]
 train <- train[-c(453, 1136, 804, 326, 370, 1149), ]
