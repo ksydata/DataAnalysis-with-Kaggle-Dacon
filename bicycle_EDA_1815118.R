@@ -1,6 +1,8 @@
 ## 서울특별시 마포구 시간별 기상상황 및 따릉이(서울시 공공자전거) 대여수 탐색적 데이터 분석 ####
+
 # 분석 목적 : 1시간 전 기상상황으로 "1시간 후" 시간대의" 따릉이 "대여수" 예측
 # https://dacon.io/competitions/open/235576/data
+
 
 library(readr)
 train <- read.csv("train.csv")
@@ -42,6 +44,8 @@ library(rpart)
 library(DMwR)
 library(RColorBrewer)
 library(scatterplot3d)
+library(car)
+library(lmtest)
 
 
 # 1.1. 결측값 처리 기준 ####
@@ -291,22 +295,53 @@ train <- train %>% rename(
   hour_bef_pm2.5 = hour_bef_pm2.5.x)
 
 
+# 1.3.8. 다중회귀식 수립하여 선형성, 정규성, 등분산성을 개선하기 위해 제거할 행 추출 ####
+
+lm <- lm(count # Yi(hat) = a + b1X1i + b2X2i + ... + b5X5i
+         ~ hour_bef_temperature 
+         + hour_bef_windspeed 
+         + hour_bef_humidity 
+         + hour_bef_ozone 
+         + hour_bef_pm10 + hour_bef_pm2.5, 
+         data = train)
+summary(lm)
+plot(lm)
+  # Residuals vs Fitted 그래프 (선형성)
+  # Normal Q-Q 그래프 (정규성)
+  # Scale-Location 그래프 (등분산성)
+  # Residuals vs Leverage 그래프 (잔차의 독립성)
+durbinWatsonTest(lm)
+dwtest(formula = lm,  alternative = "two.sided")
+  # 오차의 자기상관 (회귀로부터의 잔차가 자가상관관계가 없다는 귀무가설 채택)
+
+train_outlier2 <- train[c(453, 1136, 804, 326, 370, 1149), ]
+train <- train[-c(453, 1136, 804, 326, 370, 1149), ]
+
+
 # 1.4. 데이터 시각화 ####
 
 # 기온(x) 대여수(y) 산점도 + 대기오염지수 이상치 여부로 면 분할
-ggplot(data = train, aes(x = hour_bef_temperature, y = count)) + geom_point() + facet_wrap(~ atomosphere) + geom_smooth(se = FALSE, method = "gam")
 
 ggplot(data = train, aes(x = hour_bef_temperature, y = count, group = timeZone, col = timeZone)) + geom_point() + facet_wrap(~ atomosphere) + geom_smooth(se = FALSE, method = "gam")
+  # 전체 df 기준
 
-ggplot(data = train_outlier, aes(x = hour_bef_temperature, y = count, group = timeZone, col = timeZone)) + geom_point() + geom_smooth(se = FALSE, method = "loess")
+ggplot(data = train_outlier, aes(x = hour_bef_temperature, y = count, group = timeZone, col = timeZone)) + geom_point() + geom_smooth(se = FALSE, method = "loess", formula = "y ~ x")
 table(train_outlier$hour_bef_precipitation)
-
-ggplot(data = train_outlier, aes(x = hour_bef_windspeed, y = count, group = timeZone, col = timeZone)) + geom_point() + geom_smooth(se = FALSE, method = "loess")
+ggplot(data = train_outlier, aes(x = hour_bef_windspeed, y = count, group = timeZone, col = timeZone)) + geom_point() + geom_smooth(se = FALSE, method = "loess", formula = "y ~ x")
+  # 이상치 df 기준
 
 
 # 기온(x) 대여수(y) 산점도 + 비오는지 여부로 면 분할
+
 ggplot(data = train, aes(x = hour_bef_temperature, y = count)) + geom_point() + facet_wrap(~ hour_bef_precipitation) + geom_smooth(se = FALSE)
 
 ggplot(data = train, aes(x = hour_bef_temperature, y = count, group = timeZone, col = timeZone)) + geom_point() + facet_wrap(~hour_bef_precipitation) + geom_smooth(se = FALSE, method = "gam")
+
+
+# 습도(x) 대여수(y) 산점도 + 대기오염지수 이상치 여부로 면 분할
+
+ggplot(data = train, aes(x = hour_bef_humidity, y = count, group = timeZone, col = timeZone)) + geom_point() + facet_wrap(~atomosphere) + geom_smooth(se = FALSE, method = "gam")
+
+ggplot(data = train_outlier, aes(x = hour_bef_humidity, y = count, group = timeZone, col = timeZone)) + geom_point() + geom_smooth(se = FALSE, method = "loess", formula = "y ~ x")
 
 
