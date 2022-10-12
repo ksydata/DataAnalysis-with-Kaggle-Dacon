@@ -1,6 +1,7 @@
 
 ### 경영데이터분석2 : 머신러닝을 활용한 비즈니스 모델 개발
 
+
 library(readr)
 library(dplyr)
 library(mice)
@@ -12,8 +13,11 @@ library(ggplot2)
 library(corrplot)
 library(car)
 
+library(tidyverse)
+library(caret)
 
-# 4 ~ 7 week. 자전거 대여 데이터 분석 ####
+
+# 자전거 대여수 예측 데이터 분석 ####
 
 bicycle <- read.csv("bicycle.csv", header = T, na = NA)
 bcCodeBook <- data.frame(
@@ -100,6 +104,7 @@ ggplot(bicycle, aes(y = total)) + geom_boxplot(col = "blue", outlier.color = "re
 boxplot(bicycle$total)$stat
   # Q3 + 1.5*IQR = 647
 
+# 이상치 행 제거 (수업 진행에 따른 임의 제거)
 bicycle <- bicycle %>% filter(total < descr_bc[8, 15])
 
 
@@ -176,13 +181,140 @@ hist(log(bicycle$total), breaks = seq(0, 10, 0.1), col =  "green")
 # 2.2. 독립성(오차의 자기상관) 검토 : DW ~ 2
 
 durbinWatsonTest(lm1)
-lm <- list(print(lm))
   # H4 기각(beta4 = 0) 
   # H1, H2, H3, H5 채택(beta1,2,5 > 0, beta3 < 0)
 
+
+# 2.3. 모형 적합도 제고를 위한 다중회귀식 추정 (Bias & Variance) ####
+
 # Yi(hat) = 44.63 + 1.125*X1i + 4.129*X2i - 1.608*X3i + 1.030*X5i : 추정된 다중회귀식
-# R-squared:  0.7612,	Adjusted R-squared:  0.7611
+# R-squared :  0.7612,	Adjusted R-squared:  0.7611
+
+summary(lm1)
+print(step, short = FALSE)
+
+flm1 <- step(lm1, direction = "forward")
+  # IV 하나씩 추가 (전진선택법)
+  # AIC (모형적합도 지표) = -2*log(likelihood, 우도) + 2*K
+
+summary(flm1)
+
+blm1 <- step(lm1, direction = "backward")
+  # IV 하나씩 제거 (후진제거법)
+summary(blm1)
+
+slm1 <- step(lm1, direction = "both")
+  # stepwise (단계적 혼합법)
+summary(slm1)
+
+# 모형 적합 결과 : f|b|s 모든 방법에서 AIC = 94349.55로 동일함. IV를 모두 포함한 다중회귀식이 가장 모형적합도 높음
 
 
-# 2.3. 모형 적합도 제고를 위한 다중회귀식 추정 ####
+# 2.4. 다중공선성과 IV 중요도 ####
 
+# 2.5. IV 추가, 베이스라인 모델과 더미변수 ####
+
+# 2.6. IV 추가 및 DV 예측 ####
+
+# 2.7. 조절효과 ####
+
+
+
+# 3. 다항식 회귀 (Polynomial Regression) ####
+
+# 3.1. Split the data into training and test set ####
+
+set.seed(123)
+
+bicycle.sample <- bicycle$total %>%
+  createDataPartition(p = 0.8, list = FALSE)
+train_bc  <- bicycle[bicycle.sample, ]
+val_bc <- bicycle[- bicycle.sample, ]
+
+# 3.2. Build the model ####
+
+deg <- 5
+plm <- lm(total ~ poly(
+  season, temp, humidity, windspeed, 
+  working, difference, raw = TRUE), 
+  data = train_bc)
+
+ggplot(train_bc, aes(x = ) ) + geom_point() + stat_smooth(method = lm, formula = y ~ poly(x, deg, raw = TRUE))
+
+
+# 3.3. Make predictions and Model performance ####
+
+pred <- plm %>% predict(val_bc)
+
+RMSE = RMSE(pred, val_bc$total)
+RMSE
+
+
+# 3.4. Choose p based on the validation error ####
+
+RMSE_vector <- numeric(10)
+deg_vector <- 1:10
+
+for (deg in deg_vector) {
+  plm <- lm(total ~ poly(
+    season, temp, humidity, windspeed, 
+    working, difference, raw = TRUE), 
+    data = train_bc)
+  
+  pred <- plm %>% predict(val_bc)
+    # Make predictions 
+  
+  RMSE_vector[deg] = RMSE(pred, val_bc$total)
+    # Model performance
+}
+
+data.frame(deg = deg_vector, RMSE = RMSE_vector)
+
+# 3.5. What if we choose p based on the training error? ####
+
+RMSE_vec<-numeric(10)
+
+deg_vec<-1:10
+
+for (deg in deg_vec){
+  model <- lm(medv ~ poly(lstat, deg, raw = TRUE), data = train.data)
+  
+  # Make predictions
+  predictions <- model %>% predict(train.data)
+  # Model performance
+  RMSE_vec[deg] = RMSE(predictions, train.data$medv)
+  
+}
+
+data.frame(deg=deg_vec, RMSE=RMSE_vec)
+
+
+# 3.6. Perform the 5 fold Cross Validation(K-폴드 교차검증, K = 5) ####
+
+# fitControl <- trainControl(method = "cv(통제변수)", number = 5)
+
+fitControl <- trainControl(
+  method = "repeatedcv", number = 5, repeats = 5)
+
+deg_vector <- 1:10
+RMSE <- numeric(10)
+
+
+# 3.7. Train the model using Polynomial Linear Regression ####
+
+for (deg in deg_vector) {
+  
+  f <- bquote(total ~ poly(season, .(deg)))
+  
+  LinearRegressor <- caret::train(
+    as.formula(f), data = train_bc, 
+    method = "lm", trControl = fitControl)
+  
+  RMSE[deg]<- LinearRegressor$results$RMSE
+  
+}
+
+Degree.RegParams <- data.frame(deg_vector, RMSE)
+
+ggplot(data = Degree.RegParams, 
+       aes(x = deg_vec, y = RMSE)) + geom_line() + xlab("deg")
