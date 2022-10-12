@@ -1,7 +1,6 @@
 
 ### 경영데이터분석2 : 머신러닝을 활용한 비즈니스 모델 개발
 
-
 library(readr)
 library(dplyr)
 library(mice)
@@ -12,12 +11,12 @@ library(psych)
 library(ggplot2)
 library(corrplot)
 library(car)
-
+library(lm.beta)
 library(tidyverse)
 library(caret)
 
 
-# 자전거 대여수 예측 데이터 분석 ####
+# 4 ~ 7 week. 자전거 대여 데이터 분석 ####
 
 bicycle <- read.csv("bicycle.csv", header = T, na = NA)
 bcCodeBook <- data.frame(
@@ -122,7 +121,7 @@ print(corr, short = FALSE)
   # 가장 강한 양의 상관관계 (temp와 atemp의 r = 0.99)
 
 cor <- cor(scale(bicycle[, c(7:14)]), use = "pairwise.complete.obs")
-  # 변수 간 상대적 크기로 미치는 영향을 제거하기 위해 데이터 0 ~ 1로 정규화 수행
+  # 변수 간 상대적 크기로 미치는 영향 제거하기 위한 데이터 0 ~ 1로 정규화
   # NA 있는 위치에서의 연산만 넘어가는 파라미터
 corrplot(cor)
 
@@ -151,6 +150,8 @@ plot(lm1)
   # Normal Q-Q (정규성)
   # Scale-Location (등분산성과 선형성)
   # Residuals vs Leverage (Cook's D, 등분산성)
+
+  # [c(6720, 6721, 6722, 8915, 8917, 8918), ]
 
 bicycle <- bicycle[-c(6720, 6721, 6722, 8915, 8917, 8918), ]
 
@@ -210,6 +211,37 @@ summary(slm1)
 
 # 2.4. 다중공선성과 IV 중요도 ####
 
+vif(lm1)
+  # vif >= 5.3
+  # temp(40.101056), atemp (40.212054)
+  # GVIF^( 1 / (2*Df) ) 값 < 2
+
+lm2 <- lm(total ~ temp + humidity + windspeed + difference, data = bicycle)
+
+summary(lm2)
+  # H4 : windspeed -> total (+) 기각 강화
+plot(lm2)
+bicycle_new <- bicycle[-c(6928, 6931, 7654, 7655), ]
+lm2 <- lm(total ~ temp + humidity + windspeed + difference, data = bicycle_new)
+
+vif(lm2)
+  # 다중공선성을 일으킨 변수 atemp 제거
+
+ks.test(bicycle_new$total,
+        pnorm, 
+        mean = mean(bicycle_new$total), sd = sd(bicycle_new$total))
+  # 정규성 검토 (조건 불충족)
+durbinWatsonTest(lm2)
+  # 오차의 자기상관
+
+
+# 표준화 회귀계수의 추정치의 절댓값 = IV 중요도
+lm.beta(lm1) 
+  # dif > atem > hum > tem 
+lm.beta(lm2)
+  # dif > tem > hum
+
+
 # 2.5. IV 추가, 베이스라인 모델과 더미변수 ####
 
 # 2.6. IV 추가 및 DV 예측 ####
@@ -233,11 +265,11 @@ val_bc <- bicycle[- bicycle.sample, ]
 
 deg <- 5
 plm <- lm(total ~ poly(
-  season, temp, humidity, windspeed, 
-  working, difference, raw = TRUE), 
+  humidity, windspeed, 
+  working, raw = TRUE), 
   data = train_bc)
 
-ggplot(train_bc, aes(x = ) ) + geom_point() + stat_smooth(method = lm, formula = y ~ poly(x, deg, raw = TRUE))
+ggplot(train_bc, aes(x = total, y = windspeed) ) + geom_point() + stat_smooth(method = lm, formula = y ~ poly(x, deg, raw = TRUE))
 
 
 # 3.3. Make predictions and Model performance ####
@@ -255,9 +287,8 @@ deg_vector <- 1:10
 
 for (deg in deg_vector) {
   plm <- lm(total ~ poly(
-    season, temp, humidity, windspeed, 
-    working, difference, raw = TRUE), 
-    data = train_bc)
+    humidity, windspeed, working, 
+    raw = TRUE), data = train_bc)
   
   pred <- plm %>% predict(val_bc)
     # Make predictions 
@@ -275,16 +306,18 @@ RMSE_vec<-numeric(10)
 deg_vec<-1:10
 
 for (deg in deg_vec){
-  model <- lm(medv ~ poly(lstat, deg, raw = TRUE), data = train.data)
+  fplm <- lm(total ~ poly(
+    humidity, windspeed, working, 
+    deg, raw = TRUE), data = train_bc)
   
-  # Make predictions
-  predictions <- model %>% predict(train.data)
-  # Model performance
-  RMSE_vec[deg] = RMSE(predictions, train.data$medv)
+  pred <- fplm %>% predict(train_bc)
+    # Make predictions
   
+  RMSE_vector[deg] = RMSE(pred, train_bc$medv)
+    # Model performance
 }
 
-data.frame(deg=deg_vec, RMSE=RMSE_vec)
+data.frame(deg = deg_vector, RMSE = RMSE_vector)
 
 
 # 3.6. Perform the 5 fold Cross Validation(K-폴드 교차검증, K = 5) ####
@@ -314,5 +347,5 @@ for (deg in deg_vector) {
 
 Degree.RegParams <- data.frame(deg_vector, RMSE)
 
-ggplot(data = Degree.RegParams, 
-       aes(x = deg_vec, y = RMSE)) + geom_line() + xlab("deg")
+ggplot(data = Degree.RegParams, aes(x = deg_vec, y = RMSE)) + geom_line() + xlab("deg")
+
