@@ -122,7 +122,7 @@ print(corr, short = FALSE)
   # 가장 강한 양의 상관관계 (temp와 atemp의 r = 0.99)
 
 cor <- cor(scale(bicycle[, c(7:14)]), use = "pairwise.complete.obs")
-  # 변수간 상이한 단위 고려한 정규화
+  # 변수 간 상대적 크기로 미치는 영향을 제거하기 위해 데이터 0 ~ 1로 정규화 수행
   # NA 있는 위치에서의 연산만 넘어가는 파라미터
 corrplot(cor)
 
