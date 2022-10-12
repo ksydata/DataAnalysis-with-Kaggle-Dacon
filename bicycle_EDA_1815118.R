@@ -213,11 +213,12 @@ train$timeZone <- as.factor(train$timeZone)
 table(train$timeZone)
 train <- train %>% relocate(timeZone, .after = hour)
 
-# 자전거 대여수 범주형 파생변수
+# 자전거 대여수 및 시간대 관계 파악
 
 boxplot(train$count)$stat
 histogram(train$count)
-ggplot(data = train, aes(x = count, y = timeZone, , fill = factor(timeZone))) + geom_col() + labs(x = "따릉이 대여수", y = "시간대", title = "서울특별시 마포구\n따릉이 대여수별 시간대")
+ggplot(data = train, aes(x = timeZone, y = count, , fill = factor(timeZone))) + geom_col() + labs(x = "시간대", y = "따릉이 대여수", title = "서울특별시 마포구\n따릉이 시간대별 대여수")
+# ggplot(data = train, aes(x = count, y = timeZone, , fill = factor(timeZone))) + geom_col() + labs(x = "따릉이 대여수", y = "시간대", title = "서울특별시 마포구\n따릉이 대여수별 시간대")
 train %>% group_by(timeZone) %>% summarise(mean.count = mean(count), count = n(), sum.count = mean.count * count) %>% arrange(-sum.count)
 
 
@@ -297,8 +298,9 @@ train <- train %>% rename(
 
 
 # 1.3.8. 다중회귀식 수립하여 선형성, 정규성, 등분산성을 개선하기 위해 제거할 행 추출 ####
+  # 쿡의 거리로 다중회귀식의 그래프 개형에 영향을 미치는 값
 
-lm <- lm(count # Yi(hat) = a + b1X1i + b2X2i + ... + b5X5i
+lm <- lm(count # Yi(hat) = a + b1X1i + b2X2i + ... + b5X5i + b6X6i
          ~ hour_bef_temperature 
          + hour_bef_windspeed 
          + hour_bef_humidity 
@@ -306,17 +308,29 @@ lm <- lm(count # Yi(hat) = a + b1X1i + b2X2i + ... + b5X5i
          + hour_bef_pm10 + hour_bef_pm2.5, 
          data = train)
 summary(lm)
-plot(lm)
+  # pm2.5는 2p-value > 0.05로 상관계수 추정치가 통계적으로 유의하지 않은바 다중회귀식 추정 시 pm2.5 제거
+
+lm2 <- lm(count # Yi(hat) = a + b1X1i + b2X2i + ... + b5X5i
+         ~ hour_bef_temperature 
+         + hour_bef_windspeed 
+         + hour_bef_humidity 
+         + hour_bef_ozone 
+         + hour_bef_pm10,
+         data = train)
+summary(lm2)
+plot(lm2)
   # Residuals vs Fitted 그래프 (선형성)
   # Normal Q-Q 그래프 (정규성)
   # Scale-Location 그래프 (등분산성)
   # Residuals vs Leverage 그래프 (잔차의 독립성)
-durbinWatsonTest(lm)
-dwtest(formula = lm,  alternative = "two.sided")
-  # 오차의 자기상관 (회귀로부터의 잔차가 자가상관관계가 없다는 귀무가설 채택)
+durbinWatsonTest(lm2)
+dwtest(formula = lm2,  alternative = "two.sided")
+  # 오차의 자기상관 (회귀로부터의 잔차가 자기상관관계가 없다는 귀무가설 채택)
+vif(lm2)
+  # 다중공선성(1/공차한계)
 
-train_outlier2 <- train[c(453, 1136, 804, 326, 370, 1149), ]
-train <- train[-c(453, 1136, 804, 326, 370, 1149), ]
+train_outlier2 <- train[c(453, 1136, 804, 326, 370, 381), ]
+train <- train[-c(453, 1136, 804, 326, 370, 381), ]
 
 
 # 1.4. 데이터 시각화 ####
@@ -336,7 +350,7 @@ ggplot(data = train_outlier, aes(x = hour_bef_windspeed, y = count, group = time
 
 ggplot(data = train, aes(x = hour_bef_temperature, y = count)) + geom_point() + facet_wrap(~ hour_bef_precipitation) + geom_smooth(se = FALSE)
 
-ggplot(data = train, aes(x = hour_bef_temperature, y = count, group = timeZone, col = timeZone)) + geom_point() + facet_wrap(~hour_bef_precipitation) + geom_smooth(se = FALSE, method = "gam")
+ggplot(data = train, aes(x = hour_bef_temperature, y = count, group = timeZone, col = timeZone)) + geom_point() + facet_wrap(~hour_bef_precipitation) + geom_smooth(se = FALSE, method = "gam") + scale_color_brewer(palette = "YlGnBu")
 
 
 # 습도(x) 대여수(y) 산점도 + 대기오염지수 이상치 여부로 면 분할
@@ -344,5 +358,4 @@ ggplot(data = train, aes(x = hour_bef_temperature, y = count, group = timeZone, 
 ggplot(data = train, aes(x = hour_bef_humidity, y = count, group = timeZone, col = timeZone)) + geom_point() + facet_wrap(~atomosphere) + geom_smooth(se = FALSE, method = "gam")
 
 ggplot(data = train_outlier, aes(x = hour_bef_humidity, y = count, group = timeZone, col = timeZone)) + geom_point() + geom_smooth(se = FALSE, method = "loess", formula = "y ~ x")
-
 
