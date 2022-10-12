@@ -152,8 +152,6 @@ plot(lm1)
   # Scale-Location (등분산성과 선형성)
   # Residuals vs Leverage (Cook's D, 등분산성)
 
-  # [c(6720, 6721, 6722, 8915, 8917, 8918), ]
-
 bicycle <- bicycle[-c(6720, 6721, 6722, 8915, 8917, 8918), ]
 
 
