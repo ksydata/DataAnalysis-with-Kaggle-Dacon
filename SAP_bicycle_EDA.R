@@ -186,7 +186,7 @@ round(descr[7, 15], 2)
 # 1.3.4. 이상치 정제 및 변수 튜닝 목적의 상관분석 ####
 
 str(train)
-cor <- cor(scale(train[, c(3, 5:10)]), use = "pairwise.complete.obs")
+cor <- cor(train[, c(3, 5:10)], use = "pairwise.complete.obs")
   # 변수간 상이한 단위 고려한 정규화
   # NA 있는 위치에서의 연산만 넘어가는 파라미터
 corrplot(cor)
