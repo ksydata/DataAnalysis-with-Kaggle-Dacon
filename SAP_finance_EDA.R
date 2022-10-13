@@ -635,40 +635,5 @@ vip(glm4_trn, num_features = 16)
 
 
 
-# 1.8.4. 은행상품가입 "yes" 고객 집단 특성을 알기 위한 의사결정 분류트리 모델 ####
-
-'''
-data_contract <- data_train %>% filter(y == "yes")
-  # 1000명(25%)
-set.seed(12345)
-dim(data_contract)
-
-# 파라미터 튜닝(트리의 예측변수 선택)
-
-
-# 베이스라인 모델 구현
-data_rand <- data_contract[order(runif(1000)),]
-  # 4000개의 데이터를 난수로 섞은 데이터프레임
-
-df_train <- data_rand[1:700,]
-df_validation <- data_rand[701:1000,]
-  # 학습(train) / 검증(validation)용 데이터 쪼개기
-
-
-class(data_contract$poutcome)
-rpart.yes <- rpart(data = df_train, method = "class", poutcome ~ age + job + marital + education + housing + loan + contact + month + campaign + previous)
-summary(rpart.yes)
-
-rpart.plot(rpart.yes)
-library(rattle)
-fancyRpartPlot(rpart.yes)
-
-predict.yes <- predict(rpart.yes, df_validation$poutcome, type = "class")
-'''
-
-
-
-
-
 
 
