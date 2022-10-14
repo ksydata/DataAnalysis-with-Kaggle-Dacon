@@ -31,6 +31,14 @@ library(corrplot)
 library(RColorBrewer)
 library(rattle)
 
+library(rsample)
+library(ipred)
+library(randomForest)
+library(mlbench)
+library(dunn.test)
+library(HH)
+
+
 getwd()
 setwd("C:/PDSR/RforStatistics_FinalProject")
   # 파일경로
@@ -244,21 +252,31 @@ which(data_train$cons.conf.idx > summary(data_train$cons.conf.idx)[5] + 1.5*IQR(
 
 
 
-# 1.5.1. 상관분석 ####
+# 1.5. 상관분석 및 카이제곱 검정 ####
 
 # numeric
 names(data_train)
 cor_trn <- cor(data_train[, c(1, 11, 12, 13, 16, 17)], use = "pairwise.complete.obs")
 cor_trn <- round(cor_trn, 2)
-corrplot(cor_trn)
+corrplot(cor_trn,
+         method = "number",
+         type = "lower",
+         order = "hclust",
+          # 유사한 상관계수끼리 군집화
+         addCofe.col = "black",
+         tl.col = "black",
+         tl.srt = 45,
+         diag = F
+          # 대각 행렬 제외
+)
 
 # factor : [, c(2,3,4,5,6,7,8,9,10,14,18)]
 # NA's : [, c(2,3,4,6,7)]
-# default를 예측하기 위한 범주형 변수 상관분석
+# default를 예측하기 위한 두 범주형 변수의 카이제곱 검정
 
 str(data_train)
 
-# job, marital, education, y ####
+# 1.5.1. job, marital, education, y ####
 freq2.3 <- table(data_train[,2], data_train[,3])
 proportions(freq2.3, margin = 1)
 chisq.test(freq2.3)
@@ -292,8 +310,8 @@ proportions(freq4.18, margin = 1)
 chisq.test(freq4.18)
 
 
-# housing :loan, contact ####
-# loan : housing ####
+
+# 1.5.2. housing :loan, contact / loan : housing ####
 freq6.7 <- table(data_train[,6], data_train[,7])
 proportions(freq6.7, margin = 1)
 chisq.test(freq6.7)
@@ -332,7 +350,7 @@ chisq.test(freq7.18)
 
 
 
-# 1.5.2. 결측치 대체 ####
+# 1.5.3. 결측치 대체 ####
 
 job_mod <- mice(data_train[, c(2, 3, 4, 18)], method = "rf", printFlag = F)
 job_mod <- complete(job_mod)
@@ -361,113 +379,150 @@ mice_plot <- aggr(data_train, col = c("grey", "blue"), numbers = TRUE, sortVars 
 
 
 
-# 1.5.3. 채무불이행 연체 예측 ####
+# 1.5.4. 범주형 파생변수 생성 후 가설검정 ####
 
-set.seed(12345)
-data_train_df <- data_train %>% filter(default == "unknown")
-data_sample <- sample(c(1:dim(data_train)[1]), dim(data_train)[1] * 0.7)
-data_trn <- data_train[data_sample, ]
-data_val <- data_train[-data_sample, ]
+data_train <- data_train %>% mutate(
+  generation = case_when(age <= 19 ~ "teen", age <= 32 ~ "youth", age <= 38 ~ "midlife", age <= 47 ~ "senior", age <= 69 ~ "yold", age <= 92 ~ "old"))
+data_train$generation <- factor(
+  data_train$generation, 
+  levels = c("teen", "youth", "midlife", "senior", "yold", "old"))
+table(data_train$generation)
+ggplot(data = data_train, aes(x = generation, fill = generation)) + geom_bar() + scale_fill_brewer(palette = "Pastel2")
 
-tree <- rpart(default ~ job + marital + education + housing + loan + y, data = data_trn)
-?rpart
-summary(tree)
-rpart.plot(tree)
-fancyRpartPlot(tree)
+# Trial and Error 1 (일원분산분석) ####
 
-
-
-# 1.6. 탐색적 데이터 분석 (시각화) ####
-  # 금융상품의 금리 관련 변수
-
-ggplot(data = data_train, aes(x = y, y = default)) + geom_point() 
-  # factor / factor 분할표 작성(빈도)
-ggplot(data = data_train, aes(x = y, y = age)) + geom_point() 
-  # 연령대와 상품 가입 여부
-  # 데이터 패턴 발견 실패
-
-ggplot(data = data_train, aes(x = month, y = cons.price.idx)) + geom_point() + ylim(90, 100)
-ggplot(data = data_train, aes(x = month, y = cons.conf.idx)) + geom_point()
-  # 월별 경기 추세(물가지수, 소비자신뢰지수)
-  # 데이터 패턴 발견 실패
-
-
-
-# 1.7. 파생변수 생성 및 홍보 배제된 고객의 특성 탐색 ####
-
-# 1.8.1. 배제사유 : 과거 0건 홍보, 현재 1건 홍보된 고객 집단과 나머지 집단 비교 ####
-
-data_train <- data_train %>% arrange(age)
-data_train$ID <- c(1:3999)
-data_train <- data_train %>% relocate(ID, .before = age)
-  # 고객 나이순 정렬 후 ID 생성
-
-data_no_contact <- data_train %>% filter(campaign == 1 & previous == 0)
-  # 현재 홍보 1회, 과거 홍보 0회인 고객 데이터 프레임
-ggplot(data_no_contact, aes(x = ID, y = housing)) + geom_point() + facet_wrap(~job)
-  # 패턴 발견 실패
-ggplot(data_no_contact, aes(x = ID, y = housing)) + geom_point() + facet_wrap(~marital)
-  # 패턴 발견 실패
-
-ggplot(data_no_contact, aes(x = ID, y = loan)) + geom_point() + facet_wrap(~job)
-  # 주택담보대출을 받은 사람이 적은 직업별 집단(yes) : entrepreneur, housemaid, self-employed, unemployed
-
-ggplot(data_no_contact, aes(x = ID, y = loan)) + geom_point() + facet_wrap(~marital)
-  # 패턴 발견 실패
-
-ggplot(data_no_contact, aes(x = ID, y = loan)) + geom_point() + facet_wrap(~education)
-  # 신용대출을 받은 사람이 적은 가족유형별 집단 : basic.y
-
-data_train %>% filter(campaign >= 2 & previous >= 0) %>% group_by(loan) %>% summarise(count = n())
-  # 현재 홍보 2회 이상, 과거 홍보 0회 이상인 고객 중 신용대출 여부
-  # 신용대출 받은 고객 수 352명, 15.5%
-
-data_no_contact %>% group_by(loan) %>% summarise(count = n())
-  # 신용대출 받은 고객 수 181명, 12.7%
+# 정규성 검토 (Ha 채택, 조건 불충족)
+# 등분산성 검정 (H0 채택, 조건 충족)
   
-data_train %>% filter(campaign >= 2 & previous >= 0) %>% group_by(housing) %>% summarise(count = n())
-data_no_contact %>% group_by(housing) %>% summarise(count = n())
+hist((data_train$campaign)[levels(data_train$generation) == "teen"])
+hist((data_train$campaign)[levels(data_train$generation) == "youth"])
+hist((data_train$campaign)[levels(data_train$generation) == "midlife"])
+hist((data_train$campaign)[levels(data_train$generation) == "senior"])
+hist((data_train$campaign)[levels(data_train$generation) == "yold"])
+hist((data_train$campaign)[levels(data_train$generation) == "old"])
 
-data_contact_edu <- data_train %>% filter(campaign >= 2 & previous >= 0) %>% group_by(education) %>% summarise(count = n())
-data_no_edu <- data_no_contact %>% group_by(education) %>% summarise(count = n())
-ggplot(data_contact_edu, aes(x = education, y = count)) + geom_col(col = "blue", fill = "skyblue") + coord_flip()
-ggplot(data_no_edu, aes(x = education, y = count)) + geom_col(col = "red", fill = "orange") + coord_flip() + ylim(0,600)
+shapiro.test((data_train$campaign)[levels(data_train$generation) == "youth"])
+
+leveneTest(campaign ~ generation, data = data_train)
+  # 2P-value = 0.2547
+
+# 등분산성 조건 충족 전제한 일원분산분석 
+# (H0 채택, 연령대(gen) 집단 간 campaign 표본평균의 차이는 통계적으로 유의하지 않다는 결과)
+anova <- aov(campaign ~ generation, data = data_train)
+summary(anova)
+  # 2P-value = 0.211
 
 
-# 1.8.2. 과거 홍보, 현재 홍보된 고객 집단 특성 탐색 ####
+# Trial and Error 2 (이원분산분석) ####
 
-contact_num <- data_train %>% group_by(campaign, previous) %>% summarise(count = n())
-  # 과거, 현재 홍보된 고객 수 데이터 프레임
-data_promote <- data_train %>% filter(campaign >= 1 & previous >= 1)
-  # 652명(전체 대비 16.3%) 
-ggplot(data_promote, aes(x = ID, y = y)) + geom_point() + facet_wrap(~job)
+# 정규성 검토 (Ha 채택, 조건 불충족)
+# 집단 간 등분산성 검정 (Ha 채택, 조건 불충족)
+
+hist((data_train$previous)[levels(data_train$generation) == "teen"])
+hist((data_train$previous)[levels(data_train$generation) == "youth"])
+hist((data_train$previous)[levels(data_train$generation) == "midlife"])
+hist((data_train$previous)[levels(data_train$generation) == "senior"])
+hist((data_train$previous)[levels(data_train$generation) == "yold"])
+hist((data_train$previous)[levels(data_train$generation) == "old"])
+
+shapiro.test((data_train$previous)[levels(data_train$generation) == "youth"])
+
+leveneTest(previous ~ generation, data = data_train)
+
+# 이분산성 전제한 일원분산분석 (Welch's ANOVA)
+# (Ha 채택, 연령대(gen) 집단 간 campaign 표본평균의 차이는 통계적으로 유의하다는 결과)
+oneway.test(previous ~ generation, data = data_train, var.equal = FALSE)
+
+# 사후분석 (Bonferroni Correction)
+# old Mu = teen Mu > youth Mu = midlife Mu = senior Mu = yold Mu
+# 초고령과 고등학생 세대의 과거 상품 마케팅 건수 모평균은 청년, 중년, 장년, 고령 세대의 모평균보다 큰 값을 가지는 결과
+
+dunn.test(data_train$previous, data_train$generation, method = "bonferroni")
+
+# IV1(gen)와 DV(previous)에 대하여 IV2(job / marital / education / housing / loan)이 상호작용효과가 있는지(Ha) 이원분산분석 수행
+# (Ha 채택, marital / education / housing)
+
+data_train %>% group_by(generation) %>% summarise(mean = mean(previous)) %>% arrange(mean)
+data_train$generation <- factor(
+  data_train$generation, 
+  levels = c("senior", "youth", "midlife", "yold", "teen", "old"))
+  # 일원분산분석에서 표본평균 가장 작은 순서로 집단 먼저 출력되도록 함
 
 
-# 1.8.3. 예측변수(IV) 간 관계 파악을 위한 이항 로지스틱 회귀분석 및 상관분석 ####
+# 직업 변수는 세대 집단별 과거 캠페인 횟수 모평균 차이를 강화하는 상호작용효과가 없다
+
+tanova_j <- aov(previous ~ generation * job, data = data_train)
+summary(tanova_j)
+# print(model.tables(tanova_j, "means"), digits = 2)
+interaction.plot(data_train$generation, data_train$job, data_train$previous, bty='l', main = "interaction effect plot between Gen and Job", col = c(1:11))
+# interaction2wt(previous ~ generation * job, data = data_train)
+
+
+# 가족유형 변수는 세대 집단별 과거 캠페인 횟수 모평균 차이를 강화하는 상호작용효과가 있다
+
+tanova_m <- aov(previous ~ generation * marital, data = data_train)
+summary(tanova_m)
+interaction.plot(data_train$generation, data_train$marital, data_train$previous, bty='l', main = "interaction effect plot between Gen and Marital", col = c(1:4))
+
+
+# 교육수준 변수는 세대 집단별 과거 캠페인 횟수 모평균 차이를 강화하는 상호작용효과가 있다
+
+tanova_e <- aov(previous ~ generation * education, data = data_train)
+summary(tanova_e)
+interaction.plot(data_train$generation, data_train$education, data_train$previous, bty='l', main = "interaction effect plot between Gen and Edu", col = c(1:7))
+
+
+# 주택담보대출 변수는 세대 집단별 과거 캠페인 횟수 모평균 차이를 강화하는 상호작용효과가 있다
+
+tanova_h <- aov(previous ~ generation * housing, data = data_train)
+summary(tanova_h)
+interaction.plot(data_train$generation, data_train$housing, data_train$previous, bty='l', main = "interaction effect plot between Gen and housing", col = c(1:2))
+
+# 신용대출 변수는 세대 집단별 과거 캠페인 횟수 모평균 차이를 강화하는 상호작용효과가 없다
+
+tanova_l <- aov(previous ~ generation * loan, data = data_train)
+summary(tanova_l)
+interaction.plot(data_train$generation, data_train$loan, data_train$previous, bty='l', main = "interaction effect plot between Gen and loan", col = c(1:2))
+
+
+# Trial and Error 3 (카이제곱 독립성 검정 chi-squared) ####
+
+py <- table(data_train$generation, data_train$poutcome)
+cy <- table(data_train$generation, data_train$y)
+prop.table(py, margin = 1)
+prop.table(cy, margin = 1)
+
+chisq.test(py)
+  # 세대 변수는 과거 마케팅 성공 여부에 영향을 미친다
+chisq.test(cy)
+  # 세대 변수는 현재 정기예금 가입 여부에 영향을 미친다. 
+
+py_df <- data_train %>% group_by(generation, poutcome) %>% summarise(count = n())
+ggplot(data = py_df, aes(x = generation, y = count, fill = generation)) + geom_col() + scale_fill_brewer(palette = "YlGnBu") + facet_wrap(~poutcome) + geom_text(aes(label = count), position = position_dodge(width = 1)) + ggtitle("과거 은행 상품마케팅 성패에 따른 세대별 고객 빈도")
+
+cy_df <- data_train %>% group_by(generation, y) %>% summarise(count = n())
+ggplot(data = cy_df, aes(x = generation, y = count, fill = generation)) + geom_col() + scale_fill_brewer(palette = "Reds") + facet_wrap(~y) + geom_text(aes(label = count), position = position_dodge(width = 1)) + ggtitle("현재 은행 정기예금 가입에 따른 세대별 고객 빈도")
+
+
+# 1.6. 예측변수(IV) 간 관계 파악을 위한 이항 로지스틱 회귀분석 ####
 
 # 훈련용 및 검증용 데이터 분리 : (7:3) (6:4) (8:2)
 
-set.seed(123)
+set.seed(12345)
 data_glm <- sample(c(1:dim(data_train)[1]), 
                    dim(data_train)[1] * 0.7)
 data_trn <- data_train[data_glm, ]
+data_trn[, c(5, 12)] <- NULL
+data_val1 <- data_train[-data_glm, ]
+data_val1[, c(5, 12)] <- NULL
+  # 결측과 누락된 값이 많은 pdays, default 변수 분석 제외
 
-data_val1 <- data_train[-data_glm, ] %>% select(y, age, job, marital, education)
-data_val2 <- data_train[-data_glm, ] %>% select(y, housing, loan)
-data_val3 <- data_train[-data_glm, ] %>% select(y, contact, campaign, pdays, poutcome)
-data_val4 <- data_train[-data_glm, ] %>% select(y, month, day_of_week, emp.var.rate, cons.price.idx, cons.conf.idx)
-
-
-# 이항 로지스틱 회귀분석 모델링 1 ####
-
-glm1_trn <- glm(y ~ age + job + marital + education, family = "binomial", data = data_trn)
-  # 고객의 신원 데이터
-
+glm1_trn <- glm(y ~ ., family = "binomial", data = data_trn)
 summary(glm1_trn)
 exp(coef(glm1_trn))
 confint(glm1_trn)
 
-# 모형 1 성능 평가 (혼동행렬)
+# 모형 성능 평가 (혼동행렬)
 
 glm1_pred <- predict(glm1_trn, data_val1, type = "response")
 df_glm1_pred <- as.data.frame(glm1_pred)
@@ -488,152 +543,59 @@ confusionMatrix(data = df_glm1_pred$default,
                 reference = data_val1$y)
 
 
-# 모형 1의 유의성 검정 (카이제곱 검정) / 이탈도
+# 모형의 유의성 검정 (카이제곱 검정) / 이탈도
 
 anova(glm1_trn, test = "Chisq")
 
-# 모형 1 변수 간 다중공선성 확인(Variance Inflation Factor 즉, 분산팽창요인)
+# 모형 변수 간 다중공선성 확인(Variance Inflation Factor 즉, 분산팽창요인)
 
 vif(glm1_trn)
   # 10보다 작아야 하는 vif 값(Kabocoff, R in Action)
   # 2보다 작아야 하는 vif의 양의 제곱근
   
-# 모형 1에 영향력 있는 변수 내림차순 차트 시각화
+# 모형에 영향력 있는 변수 내림차순 차트 시각화
 
-vip(glm1_trn, num_features = 22)
-
-
-
-# 이항 로지스틱 회귀분석 모델링 2 ####
-
-glm2_trn <- glm(y ~ housing + loan, family = "binomial", data = data_trn)
-  # 고객의 여신금융 데이터
-
-summary(glm2_trn)
-exp(coef(glm2_trn))
-
-# 모형 2 성능 평가 (혼동행렬)
-
-glm2_pred <- predict(glm2_trn, data_val2, type = "response")
-df_glm2_pred <- as.data.frame(glm2_pred)
-  # 반환된 확률 결과의 데이터 프레임 작성
-df_glm2_pred$default <- ifelse(df_glm2_pred$glm2_pred >= 0.5, df_glm2_pred$default <- "Yes", df_glm2_pred$default <- "No")
-  # 0.5 임계값으로 설정하여 범주화
-table(df_glm2_pred$default)
-
-class(data_val2$y)
-table(data_val2$y)
-class(df_glm2_pred$default)
-table(df_glm2_pred$default)
-data_val2$y <- ifelse(data_val2$y == "yes", "Yes", "No")
-data_val2$y <- as.factor(data_val2$y)
-df_glm2_pred$default <- as.factor(df_glm2_pred$default)
-
-confusionMatrix(data = df_glm2_pred$default, 
-                reference = data_val2$y)
+vip(glm1_trn, num_features = 30)
 
 
+# 1.7. 채무불이행 연체 예측 ####
 
-# 모형 2의 유의성 검정 (카이제곱 검정) / 이탈도
+# 1.8. 현재 은행 수신상품 마케팅 시 가입 고객 분류 ####
 
-anova(glm2_trn, test = "Chisq")
+# 1차 의사결정 분류트리 모델링
 
-# 모형 2 변수 간 다중공선성 확인
+set.seed(12345)
+# data_train_df <- data_train %>% filter(default == "unknown")
+data_sample <- sample(c(1:dim(data_train)[1]), dim(data_train)[1] * 0.7)
+data_trn <- data_train[data_sample, ]
+data_val <- data_train[-data_sample, ]
 
-vif(glm2_trn)
+gtree <- rpart(y ~ ., data = data_trn)
+summary(gtree)
+fancyRpartPlot(gtree)
 
-# 모형 2에 영향력 있는 변수 내림차순 차트 시각화
+# 트리모델 지도학습 성능평가 혼동행렬 (정오표)
 
-vip(glm2_trn, num_features = 2)
+predtree <- predict(gtree, data_val, type = "class")
+confusionMatrix(predtree, data_val$y)
 
+# 가지치기 (Pruning)
 
+printcp(gtree)
+ptree <- prune(gtree, cp = 0.1)
+prpred <- predict(ptree, data_val, type = "class")
+fancyRpartPlot(ptree)
+confusionMatrix(prpred, data_val$y)
 
-# 이항 로지스틱 회귀분석 모델링 3 ####
+# 랜덤 포레스트
+''' 
+Error
 
-glm3_trn <- glm(y ~ contact + campaign + pdays + poutcome, family = "binomial", data = data_trn)
-  # 고객의 마케팅 데이터
+rf <- randomForest(y ~ ., data = data_trn)
+rf
+rfpred <- predict(rf, data_val)
+confusionMatrix(rfpred, data_val$y)
+'''
 
-summary(glm3_trn)
-exp(coef(glm3_trn))
-
-# 모형 3 성능 평가 (혼동행렬)
-
-glm3_pred <- predict(glm3_trn, data_val3, type = "response")
-df_glm3_pred <- as.data.frame(glm3_pred)
-# 반환된 확률 결과의 데이터 프레임 작성
-df_glm3_pred$default <- ifelse(df_glm3_pred$glm3_pred >= 0.5, df_glm3_pred$default <- "Yes", df_glm3_pred$default <- "No")
-# 0.5 임계값으로 설정하여 범주화
-table(df_glm3_pred$default)
-
-class(data_val3$y)
-table(data_val3$y)
-class(df_glm3_pred$default)
-table(df_glm3_pred$default)
-data_val3$y <- ifelse(data_val3$y == "yes", "Yes", "No")
-data_val3$y <- as.factor(data_val3$y)
-df_glm3_pred$default <- as.factor(df_glm3_pred$default)
-
-confusionMatrix(data = df_glm3_pred$default, 
-                reference = data_val3$y)
-
-
-# 모형 3의 유의성 검정 (카이제곱 검정) / 이탈도
-
-anova(glm3_trn, test = "Chisq")
-
-# 모형 3 변수 간 다중공선성 확인
-
-vif(glm3_trn)
-
-# 모형 3에 영향력 있는 변수 내림차순 차트 시각화
-
-vip(glm3_trn, num_features = 5)
-
-
-
-# 이항 로지스틱 회귀분석 모델링 4 ####
-
-glm4_trn <- glm(y ~ month + day_of_week + emp.var.rate + cons.price.idx + cons.conf.idx, family = "binomial", data = data_trn)
-  # 수신상품 금리 관련 데이터
-
-summary(glm4_trn)
-exp(coef(glm4_trn))
-
-# 모형 4 성능 평가 (혼동행렬)
-
-glm4_pred <- predict(glm4_trn, data_val4, type = "response")
-df_glm4_pred <- as.data.frame(glm4_pred)
-  # 반환된 확률 결과의 데이터 프레임 작성
-df_glm4_pred$default <- ifelse(df_glm4_pred$glm4_pred >= 0.5, df_glm4_pred$default <- "Yes", df_glm4_pred$default <- "No")
-  # 0.5 임계값으로 설정하여 범주화
-table(df_glm4_pred$default)
-
-class(data_val4$y)
-table(data_val4$y)
-class(df_glm4_pred$default)
-table(df_glm4_pred$default)
-data_val4$y <- ifelse(data_val4$y == "yes", "Yes", "No")
-data_val4$y <- as.factor(data_val4$y)
-df_glm4_pred$default <- as.factor(df_glm4_pred$default)
-
-confusionMatrix(data = df_glm4_pred$default, 
-                reference = data_val1$y)
-
-
-# 모형 4의 유의성 검정 (카이제곱 검정) / 이탈도
-
-anova(glm4_trn, test = "Chisq")
-
-# 모형 4 변수 간 다중공선성 확인
-
-vif(glm4_trn)
-
-# 모형 4에 영향력 있는 변수 내림차순 차트 시각화
-
-vip(glm4_trn, num_features = 16)
-
-
-
-
-
+# 1.9. 홍보 배제된 고객의 특성 탐색 ####
 
