@@ -548,19 +548,91 @@ confusionMatrix(data = df_glm1_pred$default,
 anova(glm1_trn, test = "Chisq")
 
 # 모형 변수 간 다중공선성 확인(Variance Inflation Factor 즉, 분산팽창요인)
+# IV 간 공통된 선형성
 
 vif(glm1_trn)
   # 10보다 작아야 하는 vif 값(Kabocoff, R in Action)
   # 2보다 작아야 하는 vif의 양의 제곱근
   
-# 모형에 영향력 있는 변수 내림차순 차트 시각화
+# 모형에 영향력 있는 변수 내림차순 차트 시각화 (표준화 회귀계수의 추정치의 절댓값)
 
 vip(glm1_trn, num_features = 30)
 
+# 변수 중요도 높은 상위 5개 IV 데이터 시각화 (다중공선성 있는 변수 제외)
 
-# 1.7. 채무불이행 연체 예측 ####
+ggplot(data = data_train, aes(x = poutcome, y = y)) + geom_jitter(aes(col = y), height = 0.1, width = 0.1)
+ggplot(data = data_train, aes(x = month, y = y)) + geom_jitter(aes(col = y), height = 0.1, width = 0.1)
+ggplot(data = data_train, aes(x = job, y = y)) + geom_jitter(aes(col = y), height = 0.1, width = 0.1)
+ggplot(data = data_train, aes(x = contact, y = y)) + geom_jitter(aes(col = y), height = 0.1, width = 0.1)
+ggplot(data = data_train, aes(x = campaign, y = y)) + geom_jitter(aes(col = y), height = 0.1, width = 0.1)
 
-# 1.8. 현재 은행 수신상품 마케팅 시 가입 고객 분류 ####
+
+
+# 1.7. 채무불이행 연체 예측 ~ loan ####
+
+# 1.7.1. 의사결정 분류트리 ####
+
+data_class <- data_train[, -c(8:18)]
+data_class <- data_class %>% filter(default == "unknown")
+dim(data_class)[2]-1
+  # x 변수의 수
+summary(data_class)
+
+class_split <- initial_split(data_class, prop = 0.7, strata = "loan") 
+  # loan or housing ?
+class_trn <- training(class_split)
+class_val <- testing(class_split)
+
+ctree <- rpart(loan ~ ., data = class_trn, method = "class", control = rpart.control(cp = 0))
+  # infinite split
+
+ctree$cptable
+# cp_opt <- ctree$ctable[which.min(ctree$cptable[, "xerror"]), "CP"]
+# ctree_p <- prune(tree, cp = cp_opt)
+
+class_ctree <- predict(ctree, newdata = class_val, type = "class") # 0.5 이상
+prob_ctree <- predict(ctree, newdata = class_val, type = "prob") # Error
+
+confusionMatrix(class_ctree, class_val$loan, positive = "yes")
+  # precision(p.p.v) : 0.22222
+  # recall(sensitivity) : 0.05556
+
+
+
+# 1.7.2. 배깅 ####
+
+class_bag <- bagging(formula = loan ~ ., data = class_val, nbagg = 100, coob = TRUE, control = rpart.control(minsplit = 2, cp = 0))
+# summary(class_bag)
+
+bag_pred <- predict(class_bag, newdata = class_val, type = "class")
+confusionMatrix(bag_pred, class_val$loan, positive = "yes")
+
+
+
+# 1.7.3. 랜덤 포레스트 ####
+n_features <- dim(data_class)[2]-1
+class_rf <- randomForest(loan ~ ., data = class_trn, mtry = floor(n_features), importance = TRUE)
+
+rf_pred <- predict(class_rf, newdata = class_val, type = "response")
+confusionMatrix(rf_pred, class_val$loan, positive = "yes")
+
+
+
+# 1.7.4. 부스팅 ####
+class_boost <- train(loan ~ ., data = class_trn, method = "xgbTree", trcontrol = trainControl("cv", number = 5))
+
+class_boost$bestTune
+
+boost_pred <- class_boost %>% predict(class_val)
+confusionMatrix(boost_pred, 
+                class_val$loan, 
+                positive = "yes")
+
+
+
+
+
+# 1.8. 현재 은행 수신상품 마케팅 시 가입 고객 분류기 ####
 
 # 1차 의사결정 분류트리 모델링
 
@@ -588,14 +660,15 @@ fancyRpartPlot(ptree)
 confusionMatrix(prpred, data_val$y)
 
 # 랜덤 포레스트
-''' 
-Error
 
-rf <- randomForest(y ~ ., data = data_trn)
+n_feature <- dim(data_sample)[2]-1
+rf <- randomForest(y ~ ., data = data_trn, mtry = floor(n_feature), importance = TRUE)
 rf
 rfpred <- predict(rf, data_val)
 confusionMatrix(rfpred, data_val$y)
-'''
+
 
 # 1.9. 홍보 배제된 고객의 특성 탐색 ####
+
+
 
