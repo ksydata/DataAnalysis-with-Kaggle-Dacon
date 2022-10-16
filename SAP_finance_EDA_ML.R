@@ -661,11 +661,15 @@ confusionMatrix(prpred, data_val$y)
 
 # 랜덤 포레스트
 
-n_feature <- dim(data_sample)[2]-1
-rf <- randomForest(y ~ ., data = data_trn, mtry = floor(n_feature), importance = TRUE)
+data_trn$pdays <- NULL
+data_val$pdays <- NULL
+
+n_feature <- dim(data_trn)[2]-1
+rf <- randomForest(y ~ ., data_trn, mtry = floor(n_feature), importance = TRUE)
 rf
 rfpred <- predict(rf, data_val)
 confusionMatrix(rfpred, data_val$y)
+
 
 
 # 1.9. 홍보 배제된 고객의 특성 탐색 ####
