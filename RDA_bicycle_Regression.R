@@ -227,6 +227,7 @@ lm2 <- lm(total ~ temp + humidity + windspeed + difference, data = bicycle)
 summary(lm2)
   # H4 : windspeed -> total (+) 기각 강화
 plot(lm2)
+
 bicycle_new <- bicycle[-c(6928, 6931, 7654, 7655), ]
 lm2 <- lm(total ~ temp + humidity + windspeed + difference, data = bicycle_new)
 
@@ -397,6 +398,29 @@ lm.beta(lm5)
   # 변수 중요도가 낮은 IV(더미변수 dv)는 회귀계수 추정치가 다른 중요도 높은 IV의 영향을 받아 추정 회귀식이 왜곡될 우려가 있음
 
 
-# 2.7. 조절효과 ####
+# 2.6.2. lm5에 기반하여 IV 측정값이 존재할 경우 DV 예측 ####
 
+# case : temp(32.2) atemp(35.4) humidity(65.7) windspeed(6.5) difference(120) working(Yes) season(summer)
+
+# Yi(hat) = 244.3421만큼 대여할 것
+
+77.133613 + 6.565*32.2 - 1.485*65.7 + 1.100*120 - 79.07*1 + 0.45*1 -26.95*0 + 8.183*0
+
+
+
+# 2.7. 조절효과 ####
+  # model1 : IV와 DV로만 구성(lm2)
+  # model2 : model1에 MV(working) 추가하여 구성(lm3)
+  # model3 : model2에 상호작용변수(humidity * working) 추가하여 구성(lm6)
+
+  # lm3와 lm6 비교하여 lm6의 설명력이 더 좋은지 확인
+
+str(bicycle_new$working)
+bicycle_new$working <- as.integer(bicycle_new$working)
+
+bicycle_new <- bicycle_new %>% mutate(inter = humidity * working)
+  # 상호작용 변수 생성
+
+lm6 <- lm(total ~ temp + humidity + windspeed + difference + working + inter, data = bicycle_new)
+anova(lm3, lm6)
 
