@@ -338,19 +338,22 @@ corrplot(cor_new,
          diag = F
          # 대각 행렬 제외
 )
-
 bicycle_new$working <- as.factor(bicycle_new$working)
 
 durbinH(lm4, rownames(summary(lm4)$coefficients))
   # Check Durbin's h-statistic on linear model
   # 설명변수에 확률변수(Random Variable)가 있을 경우
+
 lm4$coefficients
   # row.names(summary(model)$coef) == ylag1var
   # Error : In sqrt(n/(1 - n * v)) : NaNs produced
   # 데이터의 정규 분포에서 음수를 사용했기 때문에 NaN 문제 발생
+
 is.nan(log(summary(lm4)$coefficients))
   # Estimate : humidity and workingYes
 
+print(durbinH)
+  # 더빈H-통계량을 구하는 알고리즘 탐색
 
 
 # 2.6. IV 추가 2 및 DV 예측 ####
