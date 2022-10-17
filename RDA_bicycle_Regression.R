@@ -375,24 +375,28 @@ anova(lm3, lm5)
   # 결정계수 0.0038%p 증가 ~ 결정계수 변화량은 통계적으로 유의한바 lm5 > lm3가 설명력이 더 좋다.(goodness of fit)
   # 수정된 결정계수 증가
 
-# lm5 
+# lm5 : 네 개의 더미변수 회귀계수 추정치에 대하여 2p-value와 a를 비교
 # Yi(hat) = 77.133613 + 6.565*X1i - 1.485*X3i + 1.100*X5i - 79.07*dv1i + 0.45*dv2i -26.95*dv3i + 8.183*dv4i
 
+# dv2 ~ dv4
+# spring 0,0,0 | summer 1,0,0 | fall 0,1,0 | winter 0,0,1
 
 '''
-
 H1 : temp -> total (+)
 H2 : atemp -> total (+)
 H3 : humidity -> total (-)
 H4 : windspeed -> total (+)
 H5 : difference -> total (+)
-
 '''
 
+vif(lm5)
+  # GVIF( 1 / (2*Df) ) 값이 2보다 작은지 확인
+lm.beta(lm5)
+  # difference(+) > temp(+) > humidity(-) > working(-)
+  # dv2i, dv3i, dv4i는 변수 중요도가 낮음
+  # 변수 중요도가 낮은 IV(더미변수 dv)는 회귀계수 추정치가 다른 중요도 높은 IV의 영향을 받아 추정 회귀식이 왜곡될 우려가 있음
 
 
 # 2.7. 조절효과 ####
-
-
 
 
