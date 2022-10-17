@@ -301,7 +301,6 @@ anova(lm2, lm3)
 # 2.5.2. lm3 추정 결과 ####
 
 summary(lm3)
-  # Yi(hat) = 94.575 + 5.466*X1i - 1.512*X2i + 0.028*X3i + 1.111*X4i - 79.129*X5i
 table(bicycle_new$working)
   # 앞에 출력되는 "더미 변수" working의 level을 reference로 잡음
   # dvi = 0 (No), dvi = 1 (Yes)일 때 Yi(hat)이 더 큰 경우는 근무할 때보다 휴일일 때 대여수가 더 높다
@@ -338,6 +337,7 @@ corrplot(cor_new,
          diag = F
          # 대각 행렬 제외
 )
+
 bicycle_new$working <- as.factor(bicycle_new$working)
 
 durbinH(lm4, rownames(summary(lm4)$coefficients))
@@ -353,10 +353,46 @@ is.nan(log(summary(lm4)$coefficients))
   # Estimate : humidity and workingYes
 
 print(durbinH)
-  # 더빈H-통계량을 구하는 알고리즘 탐색
 
 
 # 2.6. IV 추가 2 및 DV 예측 ####
 
+# 2.6.1. season = new IV 추가 타당성 검토 ####
+
+str(bicycle_new$season)
+  # 출력 순서대로 숫자 1 ~ 4를 부여함
+summary(bicycle_new$season)
+
+lm5 <- lm(total ~ temp + humidity + windspeed + difference + working + season, data = bicycle_new)
+summary(lm5)
+  # 더미변수 season의 reference는 spring
+  # R-squared : 0.8119, Adj R-squared : 0.8117
+summary(lm3)
+  # R-squared : 0.8081, Adj R-squared : 0.808
+
+0.8119 - 0.8081
+anova(lm3, lm5)
+  # 결정계수 0.0038%p 증가 ~ 결정계수 변화량은 통계적으로 유의한바 lm5 > lm3가 설명력이 더 좋다.(goodness of fit)
+  # 수정된 결정계수 증가
+
+# lm5 
+# Yi(hat) = 77.133613 + 6.565*X1i - 1.485*X3i + 1.100*X5i - 79.07*dv1i + 0.45*dv2i -26.95*dv3i + 8.183*dv4i
+
+
+'''
+
+H1 : temp -> total (+)
+H2 : atemp -> total (+)
+H3 : humidity -> total (-)
+H4 : windspeed -> total (+)
+H5 : difference -> total (+)
+
+'''
+
+
+
 # 2.7. 조절효과 ####
+
+
+
 
