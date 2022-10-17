@@ -422,5 +422,12 @@ bicycle_new <- bicycle_new %>% mutate(inter = humidity * working)
   # 상호작용 변수 생성
 
 lm6 <- lm(total ~ temp + humidity + windspeed + difference + working + inter, data = bicycle_new)
+
 anova(lm3, lm6)
+summary(lm3)
+summary(lm6)
+  # lm3 < lm6의 모형적합도(설명력)
+  # H3 대립가설에서 humidity가 total (-) 인과관계를 설정 : b3 = - 4.795로 예상대로 음수로 유의함
+  # 기존 (-) 관계가 강화되었다는 결과 : inter        1.951 (-)*(-) = (+)
+
 
