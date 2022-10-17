@@ -11,6 +11,9 @@ library(psych)
 library(ggplot2)
 library(corrplot)
 library(car)
+library(ecm)
+  # Build an Error Correction Model
+library(lmtest)
 library(lm.beta)
 library(tidyverse)
 library(caret)
@@ -180,6 +183,7 @@ hist(log(bicycle$total), breaks = seq(0, 10, 0.1), col =  "green")
 # 2.2. 독립성(오차의 자기상관) 검토 : DW ~ 2
 
 durbinWatsonTest(lm1)
+  # 오차의 자기상관 문제 있음(잔차의 독립성 조건 불충족)
   # H4 기각(beta4 = 0) 
   # H1, H2, H3, H5 채택(beta1,2,5 > 0, beta3 < 0)
 
@@ -218,6 +222,8 @@ vif(lm1)
 
 lm2 <- lm(total ~ temp + humidity + windspeed + difference, data = bicycle)
 
+10719/4
+  # k:n = 1:30
 summary(lm2)
   # H4 : windspeed -> total (+) 기각 강화
 plot(lm2)
@@ -227,12 +233,25 @@ lm2 <- lm(total ~ temp + humidity + windspeed + difference, data = bicycle_new)
 vif(lm2)
   # 다중공선성을 일으킨 변수 atemp 제거
 
+lm2 <- lm(total ~ temp + humidity + windspeed + difference, data = bicycle_new)
 ks.test(bicycle_new$total,
         pnorm, 
         mean = mean(bicycle_new$total), sd = sd(bicycle_new$total))
   # 정규성 검토 (조건 불충족)
 durbinWatsonTest(lm2)
-  # 오차의 자기상관
+  # 오차의 자기상관 문제 있음: 회귀모델 잔차가 자동상관관계 있다는 결론
+
+corr <- corr.test(bicycle[, c(7:14)], method = "pearson", alpha = 0.05, use = "pairwise.complete.obs")
+print(corr, short = FALSE)
+# 상관계수 추정치가 통계적 유의함 (2P-value < 0.05)
+# 가장 강한 양의 상관관계 (temp와 atemp의 r = 0.99)
+
+cor <- cor(scale(bicycle[, c(7:14)]), use = "pairwise.complete.obs")
+# 변수 간 상대적 크기로 미치는 영향 제거하기 위한 데이터 0 ~ 1로 정규화
+# NA 있는 위치에서의 연산만 넘어가는 파라미터
+corrplot(cor)
+
+
 
 
 # 표준화 회귀계수의 추정치의 절댓값 = IV 중요도
@@ -242,110 +261,99 @@ lm.beta(lm2)
   # dif > tem > hum
 
 
-# 2.5. IV 추가, 베이스라인 모델과 더미변수 ####
+# 2.5. IV 추가 1 및 베이스라인 모델, 더미변수 ####
 
-# 2.6. IV 추가 및 DV 예측 ####
+# 2.5.1. working = new IV 추가 타당성 검토 ####
+
+lm3 <- lm(total ~ temp + humidity + windspeed + difference + working, data = bicycle_new)
+summary(lm3)
+ks.test(bicycle_new$total, pnorm,
+        mean = mean(bicycle_new$total),
+        sd = sd(bicycle_new$total)) 
+  # 정규성 조건 불충족, 가설검정 및 pp도표
+plot(lm3)
+  # 잔차의 등분산성을 Residuals vs Fitted 산점도로 확인
+vif(lm3)
+  # 다중공선성 문제 없음(IV간 상관관계)
+durbinWatsonTest(lm2)
+durbinWatsonTest(lm3)
+  # 오차의 자기상관 문제 있음(잔차의 독립성 조건)
+  # humidty와 windspeed 음의 상관계수 r = - 0.32
+  # total과 difference 양의 상관계수 r = 0.81
+
+cor <- cor(scale(bicycle[, c(7:14)]), use = "pairwise.complete.obs")
+corrplot(cor)
+
+
+summary(lm3)
+  # R-squared : 0.8081, Adjusted R-squared : 0.808
+summary(lm2)
+  # R-squared : 0.7617, Adjusted R-squared : 0.7616
+
+0.8081 - 0.7617
+anova(lm2, lm3)
+  # 0.0464만큼 결정계수 증가하였으며, 이는 통계적으로 유의미한 변화량
+  # Adjusted R-squared 증가하여 조건 충족
+  # lm3가 lm2가 설명력이 더 좋으며, work을 IV로 추가하기로 결정
+  # 단, 모형의 간명성(parsimony) 훼손
+
+
+# 2.5.2. lm3 추정 결과 ####
+
+summary(lm3)
+  # Yi(hat) = 94.575 + 5.466*X1i - 1.512*X2i + 0.028*X3i + 1.111*X4i - 79.129*X5i
+table(bicycle_new$working)
+  # 앞에 출력되는 "더미 변수" working의 level을 reference로 잡음
+  # dvi = 0 (No), dvi = 1 (Yes)일 때 Yi(hat)이 더 큰 경우는 근무할 때보다 휴일일 때 대여수가 더 높다
+
+
+# 2.5.3. 오차의 자기/자동상관문제 해결 시도 ####
+
+lm4 <- lm(total ~ temp + humidity + windspeed + working, data = bicycle_new)
+  # total과 difference 양의 상관계수 r = 0.81인바 IV에서 difference 제외
+  # 더빈-완슨 d검정은 설명변수가 상수 값을 가진다는 가정을 충족해야 사용 가능
+
+summary(lm4)
+ks.test(bicycle_new$total, pnorm,
+        mean = mean(bicycle_new$total),
+        sd = sd(bicycle_new$total))
+  # 정규성 조건 불충족, 가설검정 및 pp도표
+plot(lm4)
+  # 잔차의 등분산성을 Residuals vs Fitted 산점도로 확인
+vif(lm4)
+  # 다중공선성 문제 없음(IV간 상관관계)
+durbinWatsonTest(lm4)
+  # 오차의 자기상관 문제 있으나 개선 (잔차의 독립성 조건 여전히 불충족)
+  # 최소제곱 추정량에 대한 정당성 깨진 상태
+
+bicycle_new$working <- as.integer(bicycle_new$working)
+cor_new <- cor(bicycle_new[, c(5, 7:14)], use = "pairwise.complete.obs")
+corrplot(cor_new,
+         method = "number",
+         type = "lower",
+         order = "hclust",
+         # 유사한 상관계수끼리 군집화
+         tl.col = "black",
+         tl.srt = 45,
+         diag = F
+         # 대각 행렬 제외
+)
+
+bicycle_new$working <- as.factor(bicycle_new$working)
+
+durbinH(lm4, rownames(summary(lm4)$coefficients))
+  # Check Durbin's h-statistic on linear model
+  # 설명변수에 확률변수(Random Variable)가 있을 경우
+lm4$coefficients
+  # row.names(summary(model)$coef) == ylag1var
+  # Error : In sqrt(n/(1 - n * v)) : NaNs produced
+  # 데이터의 정규 분포에서 음수를 사용했기 때문에 NaN 문제 발생
+is.nan(log(summary(lm4)$coefficients))
+  # Estimate : humidity and workingYes
+
+
+
+# 2.6. IV 추가 2 및 DV 예측 ####
 
 # 2.7. 조절효과 ####
-
-
-
-# 3. 다항식 회귀 (Polynomial Regression) ####
-
-# 3.1. Split the data into training and test set ####
-
-set.seed(123)
-
-bicycle.sample <- bicycle$total %>%
-  createDataPartition(p = 0.8, list = FALSE)
-train_bc  <- bicycle[bicycle.sample, ]
-val_bc <- bicycle[- bicycle.sample, ]
-
-# 3.2. Build the model ####
-
-deg <- 5
-plm <- lm(total ~ poly(
-  humidity, windspeed, 
-  working, raw = TRUE), 
-  data = train_bc)
-
-ggplot(train_bc, aes(x = total, y = windspeed) ) + geom_point() + stat_smooth(method = lm, formula = y ~ poly(x, deg, raw = TRUE))
-
-
-# 3.3. Make predictions and Model performance ####
-
-pred <- plm %>% predict(val_bc)
-
-RMSE = RMSE(pred, val_bc$total)
-RMSE
-
-
-# 3.4. Choose p based on the validation error ####
-
-RMSE_vector <- numeric(10)
-deg_vector <- 1:10
-
-for (deg in deg_vector) {
-  plm <- lm(total ~ poly(
-    humidity, windspeed, working, 
-    raw = TRUE), data = train_bc)
-  
-  pred <- plm %>% predict(val_bc)
-    # Make predictions 
-  
-  RMSE_vector[deg] = RMSE(pred, val_bc$total)
-    # Model performance
-}
-
-data.frame(deg = deg_vector, RMSE = RMSE_vector)
-
-# 3.5. What if we choose p based on the training error? ####
-
-RMSE_vec<-numeric(10)
-
-deg_vec<-1:10
-
-for (deg in deg_vec){
-  fplm <- lm(total ~ poly(
-    humidity, windspeed, working, 
-    deg, raw = TRUE), data = train_bc)
-  
-  pred <- fplm %>% predict(train_bc)
-    # Make predictions
-  
-  RMSE_vector[deg] = RMSE(pred, train_bc$medv)
-    # Model performance
-}
-
-data.frame(deg = deg_vector, RMSE = RMSE_vector)
-
-
-# 3.6. Perform the 5 fold Cross Validation(K-폴드 교차검증, K = 5) ####
-
-# fitControl <- trainControl(method = "cv(통제변수)", number = 5)
-
-fitControl <- trainControl(
-  method = "repeatedcv", number = 5, repeats = 5)
-
-deg_vector <- 1:10
-RMSE <- numeric(10)
-
-
-# 3.7. Train the model using Polynomial Linear Regression ####
-
-for (deg in deg_vector) {
-  
-  f <- bquote(total ~ poly(season, .(deg)))
-  
-  LinearRegressor <- caret::train(
-    as.formula(f), data = train_bc, 
-    method = "lm", trControl = fitControl)
-  
-  RMSE[deg]<- LinearRegressor$results$RMSE
-  
-}
-
-Degree.RegParams <- data.frame(deg_vector, RMSE)
-
-ggplot(data = Degree.RegParams, aes(x = deg_vec, y = RMSE)) + geom_line() + xlab("deg")
 
