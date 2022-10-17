@@ -1,3 +1,4 @@
+
 ### 통계분석실습 통계학과 기말 프로젝트
 
 ## 은행에서 예금을 수신하기 위한 데이터 기반 상품홍보 전략수립 프로젝트 ####
@@ -36,7 +37,11 @@ library(ipred)
 library(randomForest)
 library(mlbench)
 library(dunn.test)
+library(forcats)
 library(HH)
+library(NbClust)
+library(factoextra)
+
 
 
 getwd()
@@ -619,15 +624,98 @@ confusionMatrix(rf_pred, class_val$loan, positive = "yes")
 
 
 # 1.7.4. 부스팅 ####
-class_boost <- train(loan ~ ., data = class_trn, method = "xgbTree", trcontrol = trainControl("cv", number = 5))
 
-class_boost$bestTune
+# class_boost <- train(loan ~ ., data = class_trn, method = "xgbTree", trcontrol = trainControl("cv", number = 5))
 
-boost_pred <- class_boost %>% predict(class_val)
-confusionMatrix(boost_pred, 
-                class_val$loan, 
-                positive = "yes")
+# class_boost$bestTune
 
+# boost_pred <- class_boost %>% predict(class_val)
+# confusionMatrix(boost_pred, class_val$loan, positive = "yes")
+
+
+
+# 1.7.5. 채무불이행 unknown의 yes, no 예측(분류) k = 2 clustering ####
+
+data_train$ID <- c(1:3989)
+data_unknown <- data_train %>% filter(default == "unknown")
+data_unknown$pdays <- NULL
+names(data_unknown)
+str(data_unknown)
+
+for (i in c(2, 3, 4, 5, 6, 7, 8, 9, 10, 13, 17, 18)) {
+  print(table(data_unknown[, i]))
+}
+
+# k-means, k-medoids 군집분석을 위한 범주형 ~ 정수형 변수로 전환 ####
+
+data_unknown$job <- factor(data_unknown$job, level = c("blue-collar", "admin.",  "services", "technician", "management", "self-employed",  "entrepreneur", "housemaid", "retired", "unemployed", "student"))
+data_unknown$marital <- factor(data_unknown$marital, level = c("single" , "married" , "divorced"))
+data_unknown$education <- factor(data_unknown$education, level = c("illiterate" , "basic.4y" , "basic.6y" , "basic.9y" , "high.school" , "university.degree" , "professional.course"))
+data_unknown$contact <- factor(data_unknown$contact, level = c("telephone", "cellular"))
+data_unknown$month <- factor(data_unknown$month, level = c("mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"))
+data_unknown$day_of_week <- factor(data_unknown$day_of_week, level = c("mon", "tue", "wed", "thu", "fri"))
+data_unknown$poutcome <- factor(data_unknown$poutcome, level = c(0, "failure", "success"))
+data_unknown$generation <- factor(data_unknown$generation, level = c("teen", "youth", "midlife", "senior", "yold", "old"))
+
+for (i in c(2, 3, 4, 5, 6, 7, 8, 9, 10, 13, 17, 18)) {
+  print(table(data_unknown[, i]))
+}
+
+data_unknown <- data_unknown %>% mutate(ijob = case_when(job == "blue-collar"~1, job == "admin."~2, job == "services"~3, job ==  "technician"~4, job == "management"~5, job == "self-employed"~6, job == "entrepreneur"~7, job == "housemaid"~8, job == "retired"~9,  job ==  "unemployed" ~10, job == "student"~11))
+data_unknown <- data_unknown %>% mutate(imarital = case_when(marital == "single"~1, marital ==  "married"~2, marital ==  "divorced"~3))
+data_unknown <- data_unknown %>% mutate(iedu = case_when(education == "illiterate"~1, education == "basic.4y"~2, education == "basic.6y"~3, education ==  "basic.9y"~4, education == "high.school"~5, education == "university.degree"~6, education == "professional.course"~7))
+data_unknown <- data_unknown %>% mutate(ihousing = case_when(housing == "no"~1, housing == "yes"~2))
+data_unknown <- data_unknown %>% mutate(iloan = case_when(loan == "no"~1, loan == "yes"~2))
+data_unknown <- data_unknown %>% mutate(icontact = case_when(contact == "telephone"~1, contact ==  "cellular"~2))
+data_unknown <- data_unknown %>% mutate(imonth = case_when(month == "mar"~3, month ==  "apr"~4, month ==  "may"~5, month == "jun"~6, month == "jul"~7, month == "aug"~8, month == "sep"~9, month == "oct"~10, month == "nov"~11, month == "dec"~12))
+data_unknown <- data_unknown %>% mutate(iday = case_when(day_of_week == "mon"~1, day_of_week ==  "tue"~2, day_of_week == "wed"~3, day_of_week == "thu"~4, day_of_week == "fri"~5))
+data_unknown <- data_unknown %>% mutate(ipoutcome = case_when(poutcome == 0~0, poutcome == "failure"~1, poutcome == "success"~2))
+data_unknown <- data_unknown %>% mutate(iy = case_when(y == "no"~1, y == "yes"~2))
+data_unknown <- data_unknown %>% mutate(igen = case_when(generation == "teen"~1, generation == "youth"~2, generation == "midlife"~3, generation == "senior"~4, generation == "yold"~5, generation == "old"~6))
+
+for (i in c(20:30)) {
+  print(table(data_unknown[, i]))
+}
+
+
+
+
+
+
+# 혼합 데이터에 대해 k-means 클러스터링을 수행하기 위해 모든 서수 범주 변수를 숫자로 변환
+
+# 분할적 군집분석 ####
+
+fviz_nbclust(data_unknown[, c(20:30)], kmeans, method = "wss", k.max = 10, verbose = FALSE)
+  # 최적의 k
+
+set.seed(100000)
+kmclust1 <- kmeans(data_unknown[, c(20:30)], 3)
+  # k-means cluster modeling
+kmclust1$centers
+kmclust1$betweenss
+
+fviz_cluster(kmclust1, data = data_unknown[, c(20:30)], palette = c("#2E9FDF", "#E7B800", "#ff0000"), geom = "point", ellipse.type = "convex", ggtheme = theme_bw())
+
+
+
+
+
+
+
+# 계층적 군집분석 ####
+
+md.pattern(data_unknown)
+
+gower_d <- daisy(data_unknown[, -c(5, 19)], metric = c("gower"))
+  
+unknown_hclust <- hclust(gower_d, method = "complete")
+summary(unknown_hclust)
+plot(unknown_hclust, cex = 0.6, hang = -1)
+rect.hclust(unknown_hclust, k = 2, border = "red")
+
+# Error
+# fviz_cluster(list(data = data_unknown[, -c(5, 19)], cluster = unknown_hclust))
 
 
 
@@ -673,6 +761,4 @@ confusionMatrix(rfpred, data_val$y)
 
 
 # 1.9. 홍보 배제된 고객의 특성 탐색 ####
-
-
 
